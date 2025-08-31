@@ -6,16 +6,16 @@ import {
   fetchPuzzle,
   copyBoard,
 } from "./utils";
-
-interface SudokuBoardProps {
-  initialBoard?: string[][];
-  onComplete?: () => void;
-}
-
-interface CellPosition {
-  row: number;
-  col: number;
-}
+import {
+  solveSudoku,
+  copyBoardForSolving,
+  getValidationStats,
+} from "./solver/sudokuSolver";
+import type { SudokuBoardProps, CellPosition } from "./types/sudoku";
+import SolverControls from "./components/SolverControls";
+import GameControls from "./components/GameControls";
+import SudokuCell from "./components/SudokuCell";
+import ValidationStats from "./components/ValidationStats";
 
 const SudokuBoard: React.FC<SudokuBoardProps> = ({
   initialBoard,
@@ -52,6 +52,27 @@ const SudokuBoard: React.FC<SudokuBoardProps> = ({
 
   // Conflicts from illegal moves
   const [conflicts, setConflicts] = useState<[number, number][]>([]);
+
+  // Solver state
+  const [isSolving, setIsSolving] = useState<boolean>(false);
+  const [solverMessage, setSolverMessage] = useState<string>("");
+  const [originalBoard, setOriginalBoard] = useState<string[][] | null>(null);
+  const [solvedBoard, setSolvedBoard] = useState<string[][] | null>(null);
+  const [showValidation, setShowValidation] = useState<boolean>(false);
+  const [validationStats, setValidationStats] = useState<{
+    totalCells: number;
+    filledCells: number;
+    correctCells: number;
+    incorrectCells: number;
+    originalCells: number;
+    accuracy: number;
+    isComplete: boolean;
+    isValid: boolean;
+  } | null>(null);
+  // Completion/modal state management to prevent modal re-opening loops
+  const [hasWon, setHasWon] = useState<boolean>(false);
+  const [showCompletionModal, setShowCompletionModal] =
+    useState<boolean>(false);
 
   // Reference to the board container for keyboard navigation
   const boardRef = useRef<HTMLDivElement>(null);
@@ -97,9 +118,12 @@ const SudokuBoard: React.FC<SudokuBoardProps> = ({
       setOriginalCells(
         newBoard.map((row) => row.map((cell) => cell !== "." && cell !== ""))
       );
+      setOriginalBoard(copyBoard(newBoard));
       setIsCompleted(false);
       setConflicts([]);
       setFocusedCell(null);
+      setHasWon(false);
+      setShowCompletionModal(false);
     } catch (error) {
       console.error("Failed to load puzzle:", error);
     } finally {
@@ -116,25 +140,122 @@ const SudokuBoard: React.FC<SudokuBoardProps> = ({
           row.map((cell) => cell !== "." && cell !== "")
         )
       );
+      setOriginalBoard(copyBoard(initialBoard));
       setIsCompleted(false);
       setConflicts([]);
+      setSolverMessage("");
+      setHasWon(false);
+      setShowCompletionModal(false);
     } else {
       // If no initial board provided, fetch a new puzzle
       loadNewPuzzle();
     }
   }, [initialBoard, loadNewPuzzle]);
 
+  // Solver functions
+  const handleSolve = useCallback(async () => {
+    setIsSolving(true);
+    setSolverMessage("Solving...");
+
+    // Create a copy of the board to solve
+    const boardToSolve = copyBoardForSolving(board);
+
+    // Use setTimeout to allow UI to update before heavy computation
+    setTimeout(() => {
+      const success = solveSudoku(boardToSolve);
+
+      if (success) {
+        setBoard(boardToSolve);
+        setSolvedBoard(copyBoard(boardToSolve));
+        setSolverMessage("Puzzle solved successfully!");
+        // mark solved but do not force-open completion modal
+        setIsCompleted(true);
+        setHasWon(true);
+        setShowCompletionModal(false);
+      } else {
+        setSolverMessage("No solution exists for this puzzle!");
+      }
+
+      setIsSolving(false);
+
+      // Clear message after 3 seconds
+      setTimeout(() => {
+        setSolverMessage("");
+      }, 3000);
+    }, 100);
+  }, [board]);
+
+  const handleResetToOriginal = useCallback(() => {
+    if (originalBoard) {
+      setBoard(copyBoard(originalBoard));
+      setOriginalCells(
+        originalBoard.map((row) =>
+          row.map((cell) => cell !== "." && cell !== "")
+        )
+      );
+      setIsCompleted(false);
+      setConflicts([]);
+      setShowValidation(false);
+      setValidationStats(null);
+      setSolvedBoard(null);
+      setHasWon(false);
+      setShowCompletionModal(false);
+      setSolverMessage("Reset to original puzzle!");
+      setTimeout(() => setSolverMessage(""), 2000);
+    }
+  }, [originalBoard]);
+
+  // Validation functions
+  const handleValidateSolution = useCallback(() => {
+    if (!solvedBoard) {
+      setSolverMessage("Please solve the puzzle first!");
+      setTimeout(() => setSolverMessage(""), 3000);
+      return;
+    }
+
+    const stats = getValidationStats(board, solvedBoard, originalCells);
+    setValidationStats(stats);
+    setShowValidation(true);
+
+    if (stats.isComplete && stats.isValid) {
+      setSolverMessage("Congratulations! Board is complete and correct!");
+      setIsCompleted(true);
+    } else if (stats.isComplete) {
+      setSolverMessage(
+        `Board is complete but has ${stats.incorrectCells} incorrect cells.`
+      );
+    } else {
+      setSolverMessage(
+        `Board has ${stats.filledCells}/${
+          81 - stats.originalCells
+        } filled cells with ${stats.accuracy}% accuracy.`
+      );
+    }
+
+    setTimeout(() => setSolverMessage(""), 5000);
+  }, [board, solvedBoard, originalCells]);
+
+  const handleToggleValidation = useCallback(() => {
+    setShowValidation(!showValidation);
+    if (!showValidation && solvedBoard) {
+      const stats = getValidationStats(board, solvedBoard, originalCells);
+      setValidationStats(stats);
+    }
+  }, [showValidation, solvedBoard, board, originalCells]);
+
   // Update conflicts whenever board changes
   useEffect(() => {
     const { conflicts: newConflicts } = checkIllegalMove(board);
     setConflicts(newConflicts);
 
-    // Check if board is completed
-    if (checkCompletion(board) && !isCompleted) {
+    // Check if board is completed; only trigger completion once until reset
+    if (checkCompletion(board) && !hasWon) {
       setIsCompleted(true);
+      setHasWon(true);
+      setShowCompletionModal(true);
       onComplete?.();
     }
-  }, [board, isCompleted, onComplete]);
+  }, [board, hasWon, onComplete]);
 
   // Handle cell value change
   const handleCellChange = (row: number, col: number, value: string) => {
@@ -320,41 +441,23 @@ const SudokuBoard: React.FC<SudokuBoardProps> = ({
     return false;
   };
 
-  // Get cell styling classes
-  const getCellClasses = (row: number, col: number): string => {
-    const baseClasses =
-      "w-12 h-12 text-center text-xl font-bold border border-gray-300 dark:border-gray-600 flex items-center justify-center transition-all duration-200";
+  // Get validation state for a cell
+  const getCellValidationState = (
+    row: number,
+    col: number
+  ): "correct" | "incorrect" | "empty" | null => {
+    if (!showValidation || !solvedBoard || originalCells[row][col]) {
+      return null;
+    }
 
-    // Add border styling for 3x3 blocks
-    let borderClasses = "";
-    if (row % 3 === 0 && row !== 0)
-      borderClasses += " border-t-2 border-t-gray-800 dark:border-t-gray-200";
-    if (col % 3 === 0 && col !== 0)
-      borderClasses += " border-l-2 border-l-gray-800 dark:border-l-gray-200";
+    const currentValue = board[row][col];
+    const solvedValue = solvedBoard[row][col];
 
-    // Highlight focused cell and related cells
-    const isFocused = focusedCell?.row === row && focusedCell?.col === col;
-    const related = isRelatedCell(row, col);
-    const focusClasses = isFocused
-      ? "ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/30"
-      : related
-      ? "bg-blue-50 dark:bg-blue-900/10"
-      : "";
+    if (currentValue === ".") {
+      return "empty";
+    }
 
-    // Conflict styling
-    const conflictClasses = hasConflict(row, col)
-      ? "bg-red-100 dark:bg-red-900/30 border-red-400"
-      : "";
-
-    // Original cell styling (darker background)
-    const originalClasses = originalCells[row][col]
-      ? "bg-gray-100 dark:bg-gray-800 cursor-not-allowed"
-      : "bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer";
-
-    // Completion celebration
-    const celebrationClasses = isCompleted ? "animate-graffiti" : "";
-
-    return `${baseClasses} ${borderClasses} ${focusClasses} ${conflictClasses} ${originalClasses} ${celebrationClasses}`;
+    return currentValue === solvedValue ? "correct" : "incorrect";
   };
 
   if (isLoading) {
@@ -384,34 +487,31 @@ const SudokuBoard: React.FC<SudokuBoardProps> = ({
       <div ref={boardWrapperRef} className="relative inline-block">
         <div
           ref={boardRef}
-          className="grid grid-cols-9 gap-0 border-2 border-gray-800 dark:border-gray-200 bg-white dark:bg-gray-900 p-2 rounded-lg shadow-lg"
+          className={`grid grid-cols-9 gap-0 border-2 border-gray-800 dark:border-gray-200 bg-white dark:bg-gray-900 p-2 rounded-lg shadow-lg transition-all duration-300 ${
+            isSolving ? "sudoku-solving" : ""
+          }`}
         >
           {board.map((row, rowIndex) =>
             row.map((cell, colIndex) => (
-              <div
+              <SudokuCell
                 key={`cell-${rowIndex}-${colIndex}`}
-                className={`${getCellClasses(rowIndex, colIndex)} sudoku-cell`}
+                value={cell}
+                isOriginal={originalCells[rowIndex][colIndex]}
+                hasConflict={hasConflict(rowIndex, colIndex)}
+                isFocused={
+                  focusedCell?.row === rowIndex && focusedCell?.col === colIndex
+                }
+                isRelated={isRelatedCell(rowIndex, colIndex)}
+                isCompleted={isCompleted}
                 onClick={() => handleCellClick(rowIndex, colIndex)}
-              >
-                {originalCells[rowIndex][colIndex] ? (
-                  <span className="text-gray-800 dark:text-gray-200">
-                    {cell}
-                  </span>
-                ) : (
-                  <input
-                    id={`cell-${rowIndex}-${colIndex}`}
-                    type="text"
-                    value={cell === "." ? "" : cell}
-                    onChange={(e) =>
-                      handleCellChange(rowIndex, colIndex, e.target.value)
-                    }
-                    onKeyDown={(e) => handleKeyDown(e, rowIndex, colIndex)}
-                    className="w-full h-full text-center bg-transparent border-none outline-none text-xl font-bold"
-                    maxLength={1}
-                    disabled={originalCells[rowIndex][colIndex]}
-                  />
-                )}
-              </div>
+                onChange={(value) =>
+                  handleCellChange(rowIndex, colIndex, value)
+                }
+                onKeyDown={(e) => handleKeyDown(e, rowIndex, colIndex)}
+                cellId={`cell-${rowIndex}-${colIndex}`}
+                validationState={getCellValidationState(rowIndex, colIndex)}
+                showValidation={showValidation}
+              />
             ))
           )}
         </div>
@@ -452,48 +552,54 @@ const SudokuBoard: React.FC<SudokuBoardProps> = ({
         )}
       </div>
 
-      {/* Controls */}
-      <div className="flex gap-4">
-        {/* Toggle for number pad */}
-        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-          <input
-            type="checkbox"
-            checked={numberPadEnabled}
-            onChange={(e) => setNumberPadEnabled(e.target.checked)}
-            className="w-4 h-4"
-          />
-          <span>Enable number pad</span>
-        </label>
-        <button
-          onClick={loadNewPuzzle}
-          className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors duration-200"
-          disabled={isLoading}
-        >
-          New Puzzle
-        </button>
-        <button
-          onClick={() => {
-            const newBoard = Array(9)
+      {/* Solver Controls */}
+      <SolverControls
+        isSolving={isSolving}
+        solverMessage={solverMessage}
+        hasOriginalBoard={!!originalBoard}
+        showValidation={showValidation}
+        onSolve={handleSolve}
+        onCheckSolution={handleValidateSolution}
+        onResetToOriginal={handleResetToOriginal}
+        onToggleValidation={handleToggleValidation}
+      />
+
+      {/* Validation Stats */}
+      {validationStats && (
+        <ValidationStats
+          stats={validationStats}
+          showValidation={showValidation}
+        />
+      )}
+
+      {/* Game Controls */}
+      <GameControls
+        isLoading={isLoading}
+        numberPadEnabled={numberPadEnabled}
+        onLoadNewPuzzle={loadNewPuzzle}
+        onClearAll={() => {
+          const newBoard = Array(9)
+            .fill(null)
+            .map(() => Array(9).fill("."));
+          setBoard(newBoard);
+          setOriginalCells(
+            Array(9)
               .fill(null)
-              .map(() => Array(9).fill("."));
-            setBoard(newBoard);
-            setOriginalCells(
-              Array(9)
-                .fill(null)
-                .map(() => Array(9).fill(false))
-            );
-            setIsCompleted(false);
-            setConflicts([]);
-            setFocusedCell(null);
-          }}
-          className="px-6 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors duration-200"
-        >
-          Clear Board
-        </button>
-      </div>
+              .map(() => Array(9).fill(false))
+          );
+          setOriginalBoard(null);
+          setSolvedBoard(null);
+          setIsCompleted(false);
+          setConflicts([]);
+          setFocusedCell(null);
+          setShowValidation(false);
+          setValidationStats(null);
+        }}
+        onToggleNumberPad={setNumberPadEnabled}
+      />
 
       {/* Completion Celebration */}
-      {isCompleted && (
+      {showCompletionModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-8 text-center shadow-2xl animate-bounce">
             <h2 className="text-4xl font-bold text-green-600 mb-4">
@@ -503,10 +609,10 @@ const SudokuBoard: React.FC<SudokuBoardProps> = ({
               You solved the Sudoku puzzle!
             </p>
             <button
-              onClick={() => setIsCompleted(false)}
+              onClick={() => setShowCompletionModal(false)}
               className="px-6 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-colors duration-200"
             >
-              Play Again
+              Close
             </button>
           </div>
         </div>

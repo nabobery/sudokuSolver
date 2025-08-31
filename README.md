@@ -14,7 +14,7 @@ A modern, interactive web-based Sudoku game built with React, TypeScript, and Ta
   - Click-to-select with number pad
   - Touch-friendly interface for mobile devices
 - **Puzzle Generation**: Fetches new puzzles from external API with fallback to classic puzzles
-- **Completion Celebration**: Animated congratulations when puzzle is solved
+- **Completion Celebration**: Optional modal on completion; does not block solved board
 
 ### 🎨 User Experience
 
@@ -31,6 +31,12 @@ A modern, interactive web-based Sudoku game built with React, TypeScript, and Ta
 - **Tailwind CSS**: Utility-first styling with custom animations
 - **Vite**: Fast development server and optimized production builds
 - **ESLint**: Code quality and consistency enforcement
+
+### 🧮 Solver Features
+
+- **Backtracking Solver**: Fast, reliable solver based on classic row/col/block constraints
+- **Check Validation**: Show per-cell correctness highlighting and aggregate stats
+- **Reset to Original**: Restore puzzle to its initial state
 
 ## 🚀 Getting Started
 
@@ -101,7 +107,21 @@ The built files will be in the `dist/` directory.
 - **Clear Board**: Reset to empty grid (useful for custom puzzles)
 - **Conflict Detection**: Red highlights show invalid placements
 - **Cell Highlighting**: Blue highlights show related cells (same row/column/block)
-- **Completion Check**: Automatic win detection with celebration
+- **Completion Check**: Automatic win detection with optional celebration
+
+## 🤖 Solver Usage
+
+Inside the board:
+
+- **🤖 Solve**: Solves the current puzzle and displays the solved board. If a solution exists, the modal will not lock the screen; you can close it.
+- **✅ Check Solution**: Computes correctness stats and highlights each non-original cell as correct/incorrect/empty.
+- **🔍 Show/Hide Validation**: Toggles per-cell validation colors.
+- **🔄 Reset**: Restores the puzzle to its original state.
+
+Notes:
+
+- A new puzzle sets a fresh original board and clears validation/overlays.
+- Solving sets the solved board reference and keeps the grid visible.
 
 ## 🏗️ Project Structure
 
@@ -109,8 +129,16 @@ The built files will be in the `dist/` directory.
 sudokuSolver/
 ├── src/
 │   ├── App.tsx              # Main application component
-│   ├── SudokuBoard.tsx      # Core game component with full logic
-│   ├── utils.ts             # Game logic utilities
+│   ├── SudokuBoard.tsx      # Core game component and UI composition
+│   ├── components/
+│   │   ├── SudokuCell.tsx        # Cell rendering
+│   │   ├── SolverControls.tsx    # Solve/validate/hint/reset controls
+│   │   └── ValidationStats.tsx   # Stats and progress display
+│   ├── solver/
+│   │   └── sudokuSolver.ts       # Backtracking solver + helpers
+│   ├── types/
+│   │   └── sudoku.ts             # Shared TS types
+│   ├── utils.ts             # Game logic utilities (validation, API fetch)
 │   ├── index.css            # Global styles and Tailwind imports
 │   ├── main.tsx             # Application entry point
 │   └── vite-env.d.ts        # Vite type definitions

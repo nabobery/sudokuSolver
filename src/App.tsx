@@ -37,31 +37,33 @@ function App() {
           </p>
         </div>
 
-        {/* Game Mode Selection */}
-        <div className="flex justify-center gap-4 mb-8">
-          <button
-            onClick={() => setUseSampleBoard(false)}
-            className={`px-6 py-3 rounded-lg font-semibold transition-all duration-300 ${
-              !useSampleBoard
-                ? "bg-white text-purple-600 shadow-lg transform scale-105"
-                : "bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm"
-            }`}
-          >
-            🔄 Random Puzzle
-          </button>
-          <button
-            onClick={() => setUseSampleBoard(true)}
-            className={`px-6 py-3 rounded-lg font-semibold transition-all duration-300 ${
-              useSampleBoard
-                ? "bg-white text-purple-600 shadow-lg transform scale-105"
-                : "bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm"
-            }`}
-          >
-            📝 Sample Puzzle
-          </button>
+        {/* Mode + Instructions */}
+        <div className="flex flex-wrap justify-center gap-3 mb-8">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setUseSampleBoard(false)}
+              className={`px-4 py-2 rounded-lg font-semibold transition-all duration-300 ${
+                !useSampleBoard
+                  ? "bg-white text-purple-600 shadow-lg"
+                  : "bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm"
+              }`}
+            >
+              🔄 Random
+            </button>
+            <button
+              onClick={() => setUseSampleBoard(true)}
+              className={`px-4 py-2 rounded-lg font-semibold transition-all duration-300 ${
+                useSampleBoard
+                  ? "bg-white text-purple-600 shadow-lg"
+                  : "bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm"
+              }`}
+            >
+              📝 Sample
+            </button>
+          </div>
           <button
             onClick={() => setShowInstructions(!showInstructions)}
-            className="px-6 py-3 rounded-lg font-semibold bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm transition-all duration-300"
+            className="px-4 py-2 rounded-lg font-semibold bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm transition-all duration-300"
           >
             {showInstructions ? "📖 Hide" : "📖 Show"} Instructions
           </button>
