@@ -1,35 +1,124 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState } from "react";
+import SudokuBoard from "./SudokuBoard";
+
+// Sample initial board from the requirements
+const sampleBoard: string[][] = [
+  ["5", "3", ".", ".", "7", ".", ".", ".", "."],
+  ["6", ".", ".", "1", "9", "5", ".", ".", "."],
+  [".", "9", "8", ".", ".", ".", ".", "6", "."],
+  ["8", ".", ".", ".", "6", ".", ".", ".", "3"],
+  ["4", ".", ".", "8", ".", "3", ".", ".", "1"],
+  ["7", ".", ".", ".", "2", ".", ".", ".", "6"],
+  [".", "6", ".", ".", ".", ".", "2", "8", "."],
+  [".", ".", ".", "4", "1", "9", ".", ".", "5"],
+  [".", ".", ".", ".", "8", ".", ".", "7", "9"],
+];
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [useSampleBoard, setUseSampleBoard] = useState<boolean>(false);
+  const [showInstructions, setShowInstructions] = useState<boolean>(true);
+
+  const handlePuzzleComplete = () => {
+    console.log("Puzzle completed! 🎉");
+  };
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="min-h-screen w-full bg-gradient-to-br from-blue-400 via-purple-500 to-pink-500 dark:from-slate-800 dark:via-slate-900 dark:to-slate-800">
+      <div className="max-w-6xl mx-auto px-6 py-12">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-5xl font-bold text-white mb-4 drop-shadow-lg">
+            🎯 Sudoku Game
+          </h1>
+          <p className="text-xl text-white/90 max-w-2xl mx-auto">
+            Challenge your mind with this interactive Sudoku puzzle. Use
+            keyboard navigation and enjoy the graffiti celebration when you
+            complete it!
+          </p>
+        </div>
+
+        {/* Game Mode Selection */}
+        <div className="flex justify-center gap-4 mb-8">
+          <button
+            onClick={() => setUseSampleBoard(false)}
+            className={`px-6 py-3 rounded-lg font-semibold transition-all duration-300 ${
+              !useSampleBoard
+                ? "bg-white text-purple-600 shadow-lg transform scale-105"
+                : "bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm"
+            }`}
+          >
+            🔄 Random Puzzle
+          </button>
+          <button
+            onClick={() => setUseSampleBoard(true)}
+            className={`px-6 py-3 rounded-lg font-semibold transition-all duration-300 ${
+              useSampleBoard
+                ? "bg-white text-purple-600 shadow-lg transform scale-105"
+                : "bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm"
+            }`}
+          >
+            📝 Sample Puzzle
+          </button>
+          <button
+            onClick={() => setShowInstructions(!showInstructions)}
+            className="px-6 py-3 rounded-lg font-semibold bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm transition-all duration-300"
+          >
+            {showInstructions ? "📖 Hide" : "📖 Show"} Instructions
+          </button>
+        </div>
+
+        {/* Instructions */}
+        {showInstructions && (
+          <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 mb-8 max-w-4xl mx-auto border border-white/20">
+            <h2 className="text-2xl font-bold text-white mb-4">
+              🎮 How to Play
+            </h2>
+            <div className="grid md:grid-cols-2 gap-6 text-white/90">
+              <div>
+                <h3 className="font-semibold mb-2">🎯 Game Rules:</h3>
+                <ul className="space-y-1 text-sm">
+                  <li>• Fill each row with numbers 1-9 (no repeats)</li>
+                  <li>• Fill each column with numbers 1-9 (no repeats)</li>
+                  <li>• Fill each 3×3 block with numbers 1-9 (no repeats)</li>
+                  <li>• Use logic to solve the puzzle</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2">⌨️ Controls:</h3>
+                <ul className="space-y-1 text-sm">
+                  <li>• Click cells or use arrow keys to navigate</li>
+                  <li>• Type numbers 1-9 to fill cells</li>
+                  <li>• Press Backspace/Delete to clear cells</li>
+                  <li>• Tab/Shift+Tab for quick navigation</li>
+                  <li>• Red highlights show conflicts</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Sudoku Board */}
+        <div className="flex justify-center">
+          <div className="w-full lg:w-3/4">
+            <SudokuBoard
+              initialBoard={useSampleBoard ? sampleBoard : undefined}
+              onComplete={handlePuzzleComplete}
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="text-center mt-12 text-white/70">
+          <p className="text-sm">
+            Built with React, TypeScript, Vite, and Tailwind CSS
+          </p>
+          <p className="text-xs mt-2">
+            Enjoy the graffiti celebration when you complete the puzzle! 🎨
+          </p>
+        </div>
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    </div>
+  );
 }
 
-export default App
+export default App;
