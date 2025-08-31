@@ -55,6 +55,38 @@ const SudokuBoard: React.FC<SudokuBoardProps> = ({
 
   // Reference to the board container for keyboard navigation
   const boardRef = useRef<HTMLDivElement>(null);
+  // Wrapper ref used for positioning the number pad relative to the board
+  const boardWrapperRef = useRef<HTMLDivElement>(null);
+  // Number pad UI state and ref
+  const [showNumberPad, setShowNumberPad] = useState<boolean>(false);
+  const [numberPadPos, setNumberPadPos] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+  const numberPadRef = useRef<HTMLDivElement | null>(null);
+  // Whether number pad (mouse UI) is enabled (persist in localStorage)
+  const [numberPadEnabled, setNumberPadEnabled] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem("sudoku:numberPadEnabled");
+      return raw === null ? true : raw === "true";
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "sudoku:numberPadEnabled",
+        numberPadEnabled ? "true" : "false"
+      );
+    } catch {
+      // ignore
+    }
+    if (!numberPadEnabled) {
+      closeNumberPad();
+    }
+  }, [numberPadEnabled]);
 
   // Load a new puzzle from API
   const loadNewPuzzle = useCallback(async () => {
@@ -185,8 +217,48 @@ const SudokuBoard: React.FC<SudokuBoardProps> = ({
   // Handle cell click to focus
   const handleCellClick = (row: number, col: number) => {
     if (!originalCells[row][col]) {
+      // focus and open number pad near this cell
       setFocusedCell({ row, col });
+      if (numberPadEnabled) openNumberPad(row, col);
     }
+  };
+
+  // Open number pad positioned near the cell
+  const openNumberPad = (row: number, col: number) => {
+    setShowNumberPad(true);
+    // compute position relative to boardRef
+    requestAnimationFrame(() => {
+      if (!boardRef.current) return;
+      const cellId = `cell-${row}-${col}`;
+      const cellEl = boardRef.current.querySelector(
+        `#${cellId}`
+      ) as HTMLElement | null;
+      if (!cellEl) return;
+      const boardRect = (
+        boardWrapperRef.current ?? boardRef.current
+      ).getBoundingClientRect();
+      const cellRect = cellEl.getBoundingClientRect();
+      // approximate pad size to avoid clipping
+      const PAD_WIDTH = 140; // px
+      const PAD_HEIGHT = 160; // px
+      let top = cellRect.bottom - boardRect.top + 8; // small offset
+      let left = cellRect.left - boardRect.left;
+      // if pad would overflow right edge of board, shift left
+      if (left + PAD_WIDTH > boardRect.width) {
+        left = Math.max(8, boardRect.width - PAD_WIDTH - 8);
+      }
+      // if pad would overflow bottom of board, show above cell
+      if (top + PAD_HEIGHT > boardRect.height) {
+        top = Math.max(8, cellRect.top - boardRect.top - PAD_HEIGHT - 8);
+      }
+      setNumberPadPos({ top, left });
+    });
+  };
+
+  // Close number pad
+  const closeNumberPad = () => {
+    setShowNumberPad(false);
+    setNumberPadPos(null);
   };
 
   // Auto-focus the focused cell
@@ -203,9 +275,49 @@ const SudokuBoard: React.FC<SudokuBoardProps> = ({
     }
   }, [focusedCell, originalCells]);
 
+  // Close number pad on outside click or Escape
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (showNumberPad) {
+        if (
+          numberPadRef.current &&
+          !numberPadRef.current.contains(target) &&
+          boardRef.current &&
+          !boardRef.current.contains(target)
+        ) {
+          closeNumberPad();
+        }
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeNumberPad();
+    };
+    document.addEventListener("click", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("click", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [showNumberPad]);
+
   // Check if a cell has a conflict
   const hasConflict = (row: number, col: number): boolean => {
     return conflicts.some(([r, c]) => r === row && c === col);
+  };
+
+  // Check if a cell is related to focused cell (same row/col/block)
+  const isRelatedCell = (row: number, col: number): boolean => {
+    if (!focusedCell) return false;
+    const fr = focusedCell.row;
+    const fc = focusedCell.col;
+    if (row === fr || col === fc) return true;
+    if (
+      Math.floor(row / 3) === Math.floor(fr / 3) &&
+      Math.floor(col / 3) === Math.floor(fc / 3)
+    )
+      return true;
+    return false;
   };
 
   // Get cell styling classes
@@ -220,10 +332,13 @@ const SudokuBoard: React.FC<SudokuBoardProps> = ({
     if (col % 3 === 0 && col !== 0)
       borderClasses += " border-l-2 border-l-gray-800 dark:border-l-gray-200";
 
-    // Highlight focused cell
+    // Highlight focused cell and related cells
     const isFocused = focusedCell?.row === row && focusedCell?.col === col;
+    const related = isRelatedCell(row, col);
     const focusClasses = isFocused
       ? "ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/30"
+      : related
+      ? "bg-blue-50 dark:bg-blue-900/10"
       : "";
 
     // Conflict styling
@@ -265,41 +380,90 @@ const SudokuBoard: React.FC<SudokuBoardProps> = ({
         </p>
       </div>
 
-      {/* Game Board */}
-      <div
-        ref={boardRef}
-        className="grid grid-cols-9 gap-0 border-2 border-gray-800 dark:border-gray-200 bg-white dark:bg-gray-900 p-2 rounded-lg shadow-lg"
-      >
-        {board.map((row, rowIndex) =>
-          row.map((cell, colIndex) => (
-            <div
-              key={`cell-${rowIndex}-${colIndex}`}
-              className={getCellClasses(rowIndex, colIndex)}
-              onClick={() => handleCellClick(rowIndex, colIndex)}
+      {/* Game Board (wrapped so keypad positions relative to it) */}
+      <div ref={boardWrapperRef} className="relative inline-block">
+        <div
+          ref={boardRef}
+          className="grid grid-cols-9 gap-0 border-2 border-gray-800 dark:border-gray-200 bg-white dark:bg-gray-900 p-2 rounded-lg shadow-lg"
+        >
+          {board.map((row, rowIndex) =>
+            row.map((cell, colIndex) => (
+              <div
+                key={`cell-${rowIndex}-${colIndex}`}
+                className={`${getCellClasses(rowIndex, colIndex)} sudoku-cell`}
+                onClick={() => handleCellClick(rowIndex, colIndex)}
+              >
+                {originalCells[rowIndex][colIndex] ? (
+                  <span className="text-gray-800 dark:text-gray-200">
+                    {cell}
+                  </span>
+                ) : (
+                  <input
+                    id={`cell-${rowIndex}-${colIndex}`}
+                    type="text"
+                    value={cell === "." ? "" : cell}
+                    onChange={(e) =>
+                      handleCellChange(rowIndex, colIndex, e.target.value)
+                    }
+                    onKeyDown={(e) => handleKeyDown(e, rowIndex, colIndex)}
+                    className="w-full h-full text-center bg-transparent border-none outline-none text-xl font-bold"
+                    maxLength={1}
+                    disabled={originalCells[rowIndex][colIndex]}
+                  />
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Number pad for mouse input */}
+        {showNumberPad && numberPadPos && (
+          <div
+            ref={(el) => {
+              numberPadRef.current = el;
+            }}
+            className="absolute z-40 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-2 shadow-lg grid grid-cols-3 gap-2"
+            style={{ top: numberPadPos.top, left: numberPadPos.left }}
+          >
+            {Array.from({ length: 9 }, (_, i) => i + 1).map((n) => (
+              <button
+                key={`np-${n}`}
+                onClick={() => {
+                  if (!focusedCell) return;
+                  handleCellChange(focusedCell.row, focusedCell.col, String(n));
+                  closeNumberPad();
+                }}
+                className="w-10 h-10 flex items-center justify-center rounded-md bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+              >
+                {n}
+              </button>
+            ))}
+            <button
+              onClick={() => {
+                if (!focusedCell) return;
+                handleCellChange(focusedCell.row, focusedCell.col, "");
+                closeNumberPad();
+              }}
+              className="col-span-3 mt-1 px-2 py-1 text-sm rounded-md bg-red-100 dark:bg-red-800 text-red-700 dark:text-red-200"
             >
-              {originalCells[rowIndex][colIndex] ? (
-                <span className="text-gray-800 dark:text-gray-200">{cell}</span>
-              ) : (
-                <input
-                  id={`cell-${rowIndex}-${colIndex}`}
-                  type="text"
-                  value={cell === "." ? "" : cell}
-                  onChange={(e) =>
-                    handleCellChange(rowIndex, colIndex, e.target.value)
-                  }
-                  onKeyDown={(e) => handleKeyDown(e, rowIndex, colIndex)}
-                  className="w-full h-full text-center bg-transparent border-none outline-none text-xl font-bold"
-                  maxLength={1}
-                  disabled={originalCells[rowIndex][colIndex]}
-                />
-              )}
-            </div>
-          ))
+              Clear
+            </button>
+          </div>
         )}
       </div>
 
       {/* Controls */}
       <div className="flex gap-4">
+        {/* Toggle for number pad */}
+        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <input
+            type="checkbox"
+            checked={numberPadEnabled}
+            onChange={(e) => setNumberPadEnabled(e.target.checked)}
+            className="w-4 h-4"
+          />
+          <span>Enable number pad</span>
+        </label>
         <button
           onClick={loadNewPuzzle}
           className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors duration-200"
